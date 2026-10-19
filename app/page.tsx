@@ -10,7 +10,6 @@ import {
 import TopographicBackground from "@/components/TopographicBackground";
 import ScrollAnimations from "@/components/ScrollAnimations";
 import CoordinateHUD from "@/components/CoordinateHUD";
-import ThemeToggle from "@/components/ThemeToggle";
 import SurveyTimeline from "@/components/SurveyTimeline";
 import FeaturedProjects from "@/components/FeaturedProjects";
 import ProjectStats from "@/components/ProjectStats";
@@ -51,59 +50,12 @@ const services = [
 
 export default function Home() {
   return (
-    <main className="relative min-h-screen overflow-hidden">
+    <main className="relative min-h-screen overflow-x-clip">
       {/* Background layers */}
       <TopographicBackground />
       <ScrollAnimations />
-      
 
-      {/* Navigation */}
-      <nav className="container-shell relative z-10 flex items-center justify-between gap-4 py-6">
-        <a
-          href="#"
-          aria-label="GEO NEXUS home"
-          className="font-[var(--font-space-grotesk)] text-xl font-bold tracking-tight"
-        >
-          GEO<span className="text-[var(--color-neon)]">{ "//" }</span>NEXUS
-        </a>
-
-        <div className="hidden items-center gap-8 text-sm text-white/65 md:flex">
-          <a className="transition hover:text-white" href="#services">
-            Services
-          </a>
-          <a className="transition hover:text-white" href="#process">
-            Our process
-          </a>
-          <a className="transition hover:text-white" href="#approach">
-            Our approach
-          </a>
-          <a className="transition hover:text-white" href="#contact">
-            Contact
-          </a>
-          <a className="transition hover:text-white" href="#projects">
-             Projects
-          </a>
-          <a className="transition hover:text-white" href="#stats">
-            Metrics
-          </a>
-          <a className="transition hover:text-white" href="#estimator">
-            Get an estimate
-          </a>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-3">
-          <ThemeToggle />
-
-          <a
-            href="#contact"
-            className="border border-[var(--color-neon)]/50 px-3 py-2 text-sm transition hover:bg-[var(--color-neon)] hover:text-black sm:px-4"
-          >
-            <span className="hidden sm:inline">Start a project</span>
-            <span className="sm:hidden">Start</span>
-            <ArrowUpRight className="ml-1 inline" size={16} />
-          </a>
-        </div>
-      </nav>
+      <SiteNavigation />
 
 
       {/* Hero */}
@@ -238,7 +190,6 @@ export default function Home() {
       <FeaturedProjects />
       <ProjectStats />
       <ProjectEstimator />
-      <SiteNavigation />
 
 
       {/* Approach */}
