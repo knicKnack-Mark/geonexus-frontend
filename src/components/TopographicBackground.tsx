@@ -4,6 +4,29 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
+type ThemeColors = {
+  terrain: number;
+  opacity: number;
+  fog: number;
+};
+
+const getThemeColors = (): ThemeColors => {
+  const isLight =
+    document.documentElement.dataset.theme === "light";
+
+  return isLight
+    ? {
+        terrain: 0x008c99,
+        opacity: 0.16,
+        fog: 0xf4f7fb,
+      }
+    : {
+        terrain: 0x00f2fe,
+        opacity: 0.2,
+        fog: 0x0b0f19,
+      };
+};
+
 export default function TopographicBackground() {
   const mountRef = useRef<HTMLDivElement>(null);
 
@@ -18,7 +41,8 @@ export default function TopographicBackground() {
     // Camera
     const camera = new THREE.PerspectiveCamera(
       55,
-      window.innerWidth / window.innerHeight,
+      Math.max(mount.clientWidth, 1) /
+        Math.max(mount.clientHeight, 1),
       0.1,
       150
     );
@@ -36,17 +60,17 @@ export default function TopographicBackground() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.setClearColor(0x000000, 0);
+
     renderer.domElement.style.display = "block";
     renderer.domElement.style.width = "100%";
     renderer.domElement.style.height = "100%";
 
     mount.appendChild(renderer.domElement);
 
-    // Create the topographic terrain mesh
+    // Create topographic terrain geometry.
     const geometry = new THREE.PlaneGeometry(42, 42, 100, 100);
     const positions = geometry.attributes.position;
 
-    // Add natural-looking elevation to the wireframe.
     for (let i = 0; i < positions.count; i++) {
       const x = positions.getX(i);
       const y = positions.getY(i);
@@ -62,24 +86,46 @@ export default function TopographicBackground() {
 
     geometry.computeVertexNormals();
 
+    // Initial theme colors.
+    const initialTheme = getThemeColors();
+
     const material = new THREE.MeshBasicMaterial({
-      color: 0x00f2fe,
+      color: initialTheme.terrain,
       wireframe: true,
       transparent: true,
-      opacity: 0.2,
+      opacity: initialTheme.opacity,
       depthWrite: false,
     });
 
     const terrain = new THREE.Mesh(geometry, material);
 
-    // Lay the terrain horizontally.
+    // Lay terrain horizontally.
     terrain.rotation.x = -Math.PI / 2;
     terrain.position.y = -1.3;
 
     scene.add(terrain);
 
-    // Subtle cyan atmosphere.
-    scene.fog = new THREE.FogExp2(0x0b0f19, 0.018);
+    // Theme-aware atmospheric fog.
+    scene.fog = new THREE.FogExp2(initialTheme.fog, 0.018);
+
+    // Update the existing scene when the theme changes.
+    const updateTerrainTheme = () => {
+      const colors = getThemeColors();
+
+      material.color.setHex(colors.terrain);
+      material.opacity = colors.opacity;
+
+      if (scene.fog instanceof THREE.FogExp2) {
+        scene.fog.color.setHex(colors.fog);
+      }
+    };
+
+    const themeObserver = new MutationObserver(updateTerrainTheme);
+
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
 
     // Scroll state.
     let targetScrollProgress = 0;
@@ -89,7 +135,7 @@ export default function TopographicBackground() {
 
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
-    ).matches;
+    );
 
     const updateScrollProgress = () => {
       const scrollableHeight =
@@ -97,17 +143,19 @@ export default function TopographicBackground() {
 
       targetScrollProgress =
         scrollableHeight > 0
-          ? THREE.MathUtils.clamp(window.scrollY / scrollableHeight, 0, 1)
+          ? THREE.MathUtils.clamp(
+              window.scrollY / scrollableHeight,
+              0,
+              1
+            )
           : 0;
     };
 
     const resizeRenderer = () => {
-      if (!mount) return;
-
       const width = mount.clientWidth;
       const height = mount.clientHeight;
 
-      if (width === 0 || height === 0) return;
+      if (width <= 0 || height <= 0) return;
 
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
@@ -129,41 +177,40 @@ export default function TopographicBackground() {
     const resizeObserver = new ResizeObserver(resizeRenderer);
     resizeObserver.observe(mount);
 
-    // Pause rendering while the background is off-screen.
+    // Pause rendering when the canvas is outside the viewport.
     const visibilityObserver = new IntersectionObserver(([entry]) => {
       isVisible = entry.isIntersecting;
     });
 
     visibilityObserver.observe(mount);
 
-    // Animation loop.
+    // Scroll-reactive animation.
     const animate = () => {
       animationFrame = requestAnimationFrame(animate);
 
       if (!isVisible) return;
 
-      if (prefersReducedMotion) {
-        // Keep the terrain still for reduced-motion preferences.
+      if (prefersReducedMotion.matches) {
         renderer.render(scene, camera);
         return;
       }
 
       const elapsedTime = performance.now();
 
-      // Smoothly catch up with the user's scroll position.
+      // Smoothly interpolate toward the scroll position.
       currentScrollProgress +=
         (targetScrollProgress - currentScrollProgress) * 0.045;
 
-      // Gentle idle movement combined with scroll-reactive rotation.
+      // Combine gentle idle movement with scroll-driven rotation.
       terrain.rotation.y =
         Math.sin(elapsedTime * 0.0005) * 0.08 +
         currentScrollProgress * 0.65;
 
-      // Move the terrain gradually through the depth of the scene.
+      // Create depth movement as the visitor scrolls.
       terrain.position.z = -currentScrollProgress * 2.2;
       terrain.position.y = -1.3 - currentScrollProgress * 0.5;
 
-      // Slightly change the camera angle as the visitor scrolls.
+      // Slowly shift the camera angle.
       camera.position.x = currentScrollProgress * 0.8;
       camera.position.y = 7 + currentScrollProgress * 1.2;
 
@@ -174,7 +221,7 @@ export default function TopographicBackground() {
 
     animate();
 
-    // Clean up animation, observers, and GPU resources.
+    // Cleanup listeners, observers, and GPU resources.
     return () => {
       cancelAnimationFrame(animationFrame);
 
@@ -183,6 +230,7 @@ export default function TopographicBackground() {
 
       resizeObserver.disconnect();
       visibilityObserver.disconnect();
+      themeObserver.disconnect();
 
       scene.remove(terrain);
 
