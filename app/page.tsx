@@ -11,7 +11,7 @@ import TopographicBackground from "@/components/TopographicBackground";
 import ScrollAnimations from "@/components/ScrollAnimations";
 import CoordinateHUD from "@/components/CoordinateHUD";
 import ThemeToggle from "@/components/ThemeToggle";
-
+import SurveyTimeline from "@/components/SurveyTimeline";
 
 const services = [
   {
@@ -43,7 +43,7 @@ export default function Home() {
       {/* Background layers */}
       <TopographicBackground />
       <ScrollAnimations />
-
+      
 
       {/* Navigation */}
       <nav className="container-shell relative z-10 flex items-center justify-between gap-4 py-6">
@@ -58,6 +58,9 @@ export default function Home() {
         <div className="hidden items-center gap-8 text-sm text-white/65 md:flex">
           <a className="transition hover:text-white" href="#services">
             Services
+          </a>
+          <a className="transition hover:text-white" href="#process">
+            Our process
           </a>
           <a className="transition hover:text-white" href="#approach">
             Our approach
@@ -208,6 +211,8 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Survey Process Timeline */}
+      <SurveyTimeline />
       {/* Approach */}
       <section
         id="approach"
