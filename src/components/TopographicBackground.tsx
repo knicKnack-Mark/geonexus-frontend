@@ -11,18 +11,17 @@ type ThemeColors = {
 };
 
 const getThemeColors = (): ThemeColors => {
-  const isLight =
-    document.documentElement.dataset.theme === "light";
+  const isLight = document.documentElement.dataset.theme === "light";
 
   return isLight
     ? {
         terrain: 0x008c99,
-        opacity: 0.16,
+        opacity: 0.38,
         fog: 0xf4f7fb,
       }
     : {
         terrain: 0x00f2fe,
-        opacity: 0.2,
+        opacity: 0.42,
         fog: 0x0b0f19,
       };
 };
@@ -32,33 +31,34 @@ export default function TopographicBackground() {
 
   useEffect(() => {
     const mount = mountRef.current;
-
     if (!mount) return;
 
-    // Scene
     const scene = new THREE.Scene();
 
-    // Camera
     const camera = new THREE.PerspectiveCamera(
       55,
       Math.max(mount.clientWidth, 1) /
         Math.max(mount.clientHeight, 1),
       0.1,
-      150
+      200
     );
 
-    camera.position.set(0, 7, 13);
+    camera.position.set(0, 8, 15);
     camera.lookAt(0, 0, 0);
 
-    // Renderer
     const renderer = new THREE.WebGLRenderer({
       alpha: true,
       antialias: true,
       powerPreference: "low-power",
     });
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
-    renderer.setSize(mount.clientWidth, mount.clientHeight);
+    renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio || 1, 1.75)
+    );
+    renderer.setSize(
+      Math.max(mount.clientWidth, 1),
+      Math.max(mount.clientHeight, 1)
+    );
     renderer.setClearColor(0x000000, 0);
 
     renderer.domElement.style.display = "block";
@@ -67,8 +67,8 @@ export default function TopographicBackground() {
 
     mount.appendChild(renderer.domElement);
 
-    // Create topographic terrain geometry.
-    const geometry = new THREE.PlaneGeometry(42, 42, 100, 100);
+    // Generate the elevated topographic surface.
+    const geometry = new THREE.PlaneGeometry(48, 48, 120, 120);
     const positions = geometry.attributes.position;
 
     for (let i = 0; i < positions.count; i++) {
@@ -76,17 +76,16 @@ export default function TopographicBackground() {
       const y = positions.getY(i);
 
       const elevation =
-        Math.sin(x * 0.32) * 0.35 +
-        Math.cos(y * 0.27) * 0.3 +
-        Math.sin((x + y) * 0.18) * 0.2 +
-        Math.cos(Math.sqrt(x * x + y * y) * 0.35) * 0.15;
+        Math.sin(x * 0.32) * 0.55 +
+        Math.cos(y * 0.27) * 0.45 +
+        Math.sin((x + y) * 0.18) * 0.3 +
+        Math.cos(Math.sqrt(x * x + y * y) * 0.35) * 0.2;
 
       positions.setZ(i, elevation);
     }
 
     geometry.computeVertexNormals();
 
-    // Initial theme colors.
     const initialTheme = getThemeColors();
 
     const material = new THREE.MeshBasicMaterial({
@@ -95,25 +94,50 @@ export default function TopographicBackground() {
       transparent: true,
       opacity: initialTheme.opacity,
       depthWrite: false,
+      side: THREE.DoubleSide,
     });
 
     const terrain = new THREE.Mesh(geometry, material);
 
-    // Lay terrain horizontally.
     terrain.rotation.x = -Math.PI / 2;
-    terrain.position.y = -1.3;
+    terrain.position.set(0, -0.8, 0);
+    terrain.frustumCulled = false;
 
     scene.add(terrain);
 
-    // Theme-aware atmospheric fog.
-    scene.fog = new THREE.FogExp2(initialTheme.fog, 0.018);
+    // Add a second, subtler terrain grid for more visual depth.
+    const detailGeometry = new THREE.PlaneGeometry(48, 48, 60, 60);
+    const detailMaterial = new THREE.MeshBasicMaterial({
+      color: initialTheme.terrain,
+      wireframe: true,
+      transparent: true,
+      opacity: initialTheme.opacity * 0.3,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
 
-    // Update the existing scene when the theme changes.
+    const detailTerrain = new THREE.Mesh(
+      detailGeometry,
+      detailMaterial
+    );
+
+    detailTerrain.rotation.x = -Math.PI / 2;
+    detailTerrain.position.set(0, -0.78, 0);
+    detailTerrain.scale.set(1.04, 1.04, 1);
+    detailTerrain.frustumCulled = false;
+
+    scene.add(detailTerrain);
+
+    scene.fog = new THREE.FogExp2(initialTheme.fog, 0.008);
+
     const updateTerrainTheme = () => {
       const colors = getThemeColors();
 
       material.color.setHex(colors.terrain);
       material.opacity = colors.opacity;
+
+      detailMaterial.color.setHex(colors.terrain);
+      detailMaterial.opacity = colors.opacity * 0.3;
 
       if (scene.fog instanceof THREE.FogExp2) {
         scene.fog.color.setHex(colors.fog);
@@ -127,7 +151,6 @@ export default function TopographicBackground() {
       attributeFilter: ["data-theme"],
     });
 
-    // Scroll state.
     let targetScrollProgress = 0;
     let currentScrollProgress = 0;
     let animationFrame = 0;
@@ -161,7 +184,9 @@ export default function TopographicBackground() {
       camera.updateProjectionMatrix();
 
       renderer.setSize(width, height);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+      renderer.setPixelRatio(
+        Math.min(window.devicePixelRatio || 1, 1.75)
+      );
 
       updateScrollProgress();
     };
@@ -171,57 +196,51 @@ export default function TopographicBackground() {
     window.addEventListener("scroll", updateScrollProgress, {
       passive: true,
     });
-
     window.addEventListener("resize", resizeRenderer);
 
     const resizeObserver = new ResizeObserver(resizeRenderer);
     resizeObserver.observe(mount);
 
-    // Pause rendering when the canvas is outside the viewport.
     const visibilityObserver = new IntersectionObserver(([entry]) => {
       isVisible = entry.isIntersecting;
     });
 
     visibilityObserver.observe(mount);
 
-    // Scroll-reactive animation.
     const animate = () => {
       animationFrame = requestAnimationFrame(animate);
 
       if (!isVisible) return;
 
-      if (prefersReducedMotion.matches) {
-        renderer.render(scene, camera);
-        return;
+      if (!prefersReducedMotion.matches) {
+        const elapsedTime = performance.now();
+
+        currentScrollProgress +=
+          (targetScrollProgress - currentScrollProgress) * 0.045;
+
+        const rotation =
+          Math.sin(elapsedTime * 0.0005) * 0.035 +
+          currentScrollProgress * 0.25;
+
+        terrain.rotation.z = rotation;
+        detailTerrain.rotation.z = rotation;
+
+        terrain.position.z = -currentScrollProgress * 1.2;
+        detailTerrain.position.z = terrain.position.z;
+
+        terrain.position.y = -0.8 - currentScrollProgress * 0.2;
+        detailTerrain.position.y = terrain.position.y + 0.02;
+
+        camera.position.x = currentScrollProgress * 0.4;
+        camera.position.y = 8 + currentScrollProgress * 0.6;
       }
 
-      const elapsedTime = performance.now();
-
-      // Smoothly interpolate toward the scroll position.
-      currentScrollProgress +=
-        (targetScrollProgress - currentScrollProgress) * 0.045;
-
-      // Combine gentle idle movement with scroll-driven rotation.
-      terrain.rotation.y =
-        Math.sin(elapsedTime * 0.0005) * 0.08 +
-        currentScrollProgress * 0.65;
-
-      // Create depth movement as the visitor scrolls.
-      terrain.position.z = -currentScrollProgress * 2.2;
-      terrain.position.y = -1.3 - currentScrollProgress * 0.5;
-
-      // Slowly shift the camera angle.
-      camera.position.x = currentScrollProgress * 0.8;
-      camera.position.y = 7 + currentScrollProgress * 1.2;
-
       camera.lookAt(0, 0, 0);
-
       renderer.render(scene, camera);
     };
 
     animate();
 
-    // Cleanup listeners, observers, and GPU resources.
     return () => {
       cancelAnimationFrame(animationFrame);
 
@@ -232,10 +251,13 @@ export default function TopographicBackground() {
       visibilityObserver.disconnect();
       themeObserver.disconnect();
 
-      scene.remove(terrain);
+      scene.remove(terrain, detailTerrain);
 
       geometry.dispose();
       material.dispose();
+      detailGeometry.dispose();
+      detailMaterial.dispose();
+
       renderer.dispose();
 
       if (renderer.domElement.parentElement === mount) {
@@ -248,7 +270,10 @@ export default function TopographicBackground() {
     <div
       ref={mountRef}
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+      style={{
+        opacity: 1,
+      }}
     />
   );
 }
