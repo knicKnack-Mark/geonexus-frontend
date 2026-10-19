@@ -12,6 +12,18 @@ import ScrollAnimations from "@/components/ScrollAnimations";
 import CoordinateHUD from "@/components/CoordinateHUD";
 import ThemeToggle from "@/components/ThemeToggle";
 import SurveyTimeline from "@/components/SurveyTimeline";
+import FeaturedProjects from "@/components/FeaturedProjects";
+import ProjectStats from "@/components/ProjectStats";
+import ProjectEstimator from "@/components/ProjectEstimator";
+import SiteNavigation from "@/components/SiteNavigation";
+
+
+
+
+
+
+
+
 
 const services = [
   {
@@ -52,7 +64,7 @@ export default function Home() {
           aria-label="GEO NEXUS home"
           className="font-[var(--font-space-grotesk)] text-xl font-bold tracking-tight"
         >
-          GEO<span className="text-[var(--color-neon)]">//</span>NEXUS
+          GEO<span className="text-[var(--color-neon)]">{ "//" }</span>NEXUS
         </a>
 
         <div className="hidden items-center gap-8 text-sm text-white/65 md:flex">
@@ -67,6 +79,15 @@ export default function Home() {
           </a>
           <a className="transition hover:text-white" href="#contact">
             Contact
+          </a>
+          <a className="transition hover:text-white" href="#projects">
+             Projects
+          </a>
+          <a className="transition hover:text-white" href="#stats">
+            Metrics
+          </a>
+          <a className="transition hover:text-white" href="#estimator">
+            Get an estimate
           </a>
         </div>
 
@@ -211,8 +232,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Survey Process Timeline */}
+
+
       <SurveyTimeline />
+      <FeaturedProjects />
+      <ProjectStats />
+      <ProjectEstimator />
+      <SiteNavigation />
+
+
       {/* Approach */}
       <section
         id="approach"
