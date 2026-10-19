@@ -35,6 +35,29 @@ export default function SiteNavigation() {
 
   const closeMenu = () => setMenuOpen(false);
 
+  const handleNavigation = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) => {
+    if (!href.startsWith("#")) return;
+
+    const target = document.querySelector(href);
+
+    if (!target) return;
+
+    event.preventDefault();
+
+    target.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "start",
+    });
+
+    window.history.replaceState(null, "", href);
+    setMenuOpen(false);
+  };
+
   return (
     <header className="relative z-50">
       <nav
@@ -57,6 +80,7 @@ export default function SiteNavigation() {
             <a
               key={link.href}
               href={link.href}
+              onClick={(event) => handleNavigation(event, link.href)}
               className="text-xs text-white/60 transition-colors hover:text-[var(--color-neon)] xl:text-sm"
             >
               {link.label}
@@ -70,6 +94,7 @@ export default function SiteNavigation() {
 
           <a
             href="#estimator"
+            onClick={(event) => handleNavigation(event, "#estimator")}
             className="inline-flex items-center gap-2 rounded-full border border-[var(--color-neon)]/30 px-4 py-2.5 text-xs font-medium text-white transition hover:border-[var(--color-neon)] hover:bg-[var(--color-neon)]/10"
           >
             Start a project
@@ -114,7 +139,7 @@ export default function SiteNavigation() {
               key={link.href}
               href={link.href}
               tabIndex={menuOpen ? 0 : -1}
-              onClick={closeMenu}
+              onClick={(event) => handleNavigation(event, link.href)}
               className="flex items-center justify-between rounded-xl px-4 py-3.5 text-sm text-white/70 transition hover:bg-white/[0.05] hover:text-[var(--color-neon)]"
               style={{ transitionDelay: menuOpen ? `${index * 20}ms` : "0ms" }}
             >
@@ -127,7 +152,7 @@ export default function SiteNavigation() {
             <a
               href="#estimator"
               tabIndex={menuOpen ? 0 : -1}
-              onClick={closeMenu}
+              onClick={(event) => handleNavigation(event, "#estimator")}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-neon)] px-4 py-3.5 text-sm font-semibold text-black transition hover:brightness-110"
             >
               Start a project
