@@ -292,3 +292,8 @@ html[data-theme="light"] .hero-orbit > div[class*="bg-"] {
     animation: none !important;
   }
 }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 88px;
+}
