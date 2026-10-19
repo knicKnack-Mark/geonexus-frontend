@@ -11,16 +11,16 @@ export default function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("geonexus-theme");
+    const frame = window.requestAnimationFrame(() => {
+      const savedTheme = localStorage.getItem("theme");
+      const initialTheme = savedTheme === "light" ? "light" : "dark";
 
-    const initialTheme: Theme =
-      savedTheme === "light" || savedTheme === "dark"
-        ? savedTheme
-        : "dark";
+      setTheme(initialTheme);
+      document.documentElement.dataset.theme = initialTheme;
+      setMounted(true);
+    });
 
-    setTheme(initialTheme);
-    document.documentElement.dataset.theme = initialTheme;
-    setMounted(true);
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   const toggleTheme = () => {
