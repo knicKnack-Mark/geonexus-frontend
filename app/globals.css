@@ -295,5 +295,56 @@ html[data-theme="light"] .hero-orbit > div[class*="bg-"] {
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 88px;
+  scroll-padding-top: 6rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+
+
+
+/* GEONEXUS — HIGH-VISIBILITY SCROLLBAR */
+
+html {
+  overflow-y: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: #38bdf8 #101a2b;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Chrome and Microsoft Edge */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 14px;
+  display: block;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background: #101a2b;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+  background: #38bdf8;
+  border: 3px solid #101a2b;
+  border-radius: 999px;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+  background: #7dd3fc;
+  border-color: #101a2b;
+}
+
+html::-webkit-scrollbar-thumb:active,
+body::-webkit-scrollbar-thumb:active {
+  background: #ffffff;
 }
