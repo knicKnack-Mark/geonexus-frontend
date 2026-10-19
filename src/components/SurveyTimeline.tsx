@@ -64,8 +64,11 @@ export default function SurveyTimeline() {
     ).matches;
 
     if (reduceMotion) {
-      setVisibleStages(stages.length);
-      return;
+      const frame = window.requestAnimationFrame(() => {
+        setVisibleStages(stages.length);
+      });
+
+      return () => window.cancelAnimationFrame(frame);
     }
 
     const observer = new IntersectionObserver(
