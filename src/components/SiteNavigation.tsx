@@ -59,7 +59,7 @@ export default function SiteNavigation() {
   };
 
   return (
-    <header className="relative z-50">
+    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#080d18]/80 backdrop-blur-xl">
       <nav
         aria-label="Main navigation"
         className="container-shell mx-auto flex items-center justify-between gap-4 px-5 py-5 sm:px-8 sm:py-6"
