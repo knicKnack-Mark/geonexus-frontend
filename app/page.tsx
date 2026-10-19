@@ -179,7 +179,7 @@ export default function Home() {
       {/* Services */}
       <section
         id="services"
-        className="container-shell relative z-10 py-24"
+        className="container-shell relative z-10 py-24 scroll-mt-24"
       >
         <div className="mb-12 flex flex-col justify-between gap-5 md:flex-row md:items-end">
           <div>
@@ -242,7 +242,7 @@ export default function Home() {
 
 
       {/* Approach */}
-      <section
+      <section 
         id="approach"
         className="container-shell relative z-10 py-16"
       >
