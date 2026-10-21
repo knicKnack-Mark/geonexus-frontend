@@ -2,15 +2,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import Link from "next/link";
+import type {
+  GeoJSONSource,
+  Map as MapLibreMap,
+  Marker as MapLibreMarker,
+} from "maplibre-gl";
 import {
   ArrowLeft,
   Crosshair,
-  Link,
-  Link,
   LocateFixed,
   MapPin,
   RotateCcw,
+  Ruler,
   Search,
 } from "lucide-react";
 
@@ -18,6 +22,78 @@ type Coordinates = {
   lat: number;
   lng: number;
 };
+type MeasurementMode = "none" | "distance" | "area";
+type MeasurePoint = {
+  lng: number;
+  lat: number;
+};
+
+const EARTH_RADIUS_METERS = 6_371_008.8;
+
+function calculateDistance(points: MeasurePoint[]): number {
+  let total = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const previous = points[i - 1];
+    const current = points[i];
+
+    const lat1 = (previous.lat * Math.PI) / 180;
+    const lat2 = (current.lat * Math.PI) / 180;
+    const deltaLat = lat2 - lat1;
+    const deltaLng = ((current.lng - previous.lng) * Math.PI) / 180;
+
+    const a =
+      Math.sin(deltaLat / 2) ** 2 +
+      Math.cos(lat1) *
+        Math.cos(lat2) *
+        Math.sin(deltaLng / 2) ** 2;
+
+    total +=
+      2 *
+      EARTH_RADIUS_METERS *
+      Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+  }
+
+  return total;
+}
+
+function calculateArea(points: MeasurePoint[]): number {
+  if (points.length < 3) return 0;
+
+  let sum = 0;
+
+  for (let i = 0; i < points.length; i++) {
+    const current = points[i];
+    const next = points[(i + 1) % points.length];
+
+    const currentLng = (current.lng * Math.PI) / 180;
+    const nextLng = (next.lng * Math.PI) / 180;
+    const currentLat = (current.lat * Math.PI) / 180;
+    const nextLat = (next.lat * Math.PI) / 180;
+
+    sum +=
+      (nextLng - currentLng) *
+      (2 + Math.sin(currentLat) + Math.sin(nextLat));
+  }
+
+  return Math.abs((sum * EARTH_RADIUS_METERS ** 2) / 2);
+}
+
+function formatDistance(meters: number): string {
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(3)} km`;
+  }
+
+  return `${meters.toFixed(2)} m`;
+}
+
+function formatArea(squareMeters: number): string {
+  if (squareMeters >= 10_000) {
+    return `${(squareMeters / 10_000).toFixed(4)} ha`;
+  }
+
+  return `${squareMeters.toFixed(2)} m²`;
+}
 
 const INITIAL_CENTER: [number, number] = [121.774, 12.8797];
 const INITIAL_ZOOM = 5;
@@ -32,6 +108,14 @@ export default function ExploreMap() {
   const [searchValue, setSearchValue] = useState("");
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
   const [searchError, setSearchError] = useState("");
+
+  const measurementModeRef = useRef<MeasurementMode>("none");
+  const measurementPointsRef = useRef<MeasurePoint[]>([]);
+
+  const [measurementMode, setMeasurementMode] =
+    useState<MeasurementMode>("none");
+  const [measurementPoints, setMeasurementPoints] =
+    useState<MeasurePoint[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,10 +155,54 @@ export default function ExploreMap() {
         );
 
         map.on("load", () => {
-          if (!cancelled) {
-            setMapReady(true);
-            setMapError("");
-          }
+          if (cancelled || !map) return;
+
+          map.addSource("measurement-geometry", {
+            type: "geojson",
+            data: {
+              type: "FeatureCollection",
+              features: [],
+            },
+          });
+
+          map.addLayer({
+            id: "measurement-area-fill",
+            type: "fill",
+            source: "measurement-geometry",
+            filter: ["==", ["geometry-type"], "Polygon"],
+            paint: {
+              "fill-color": "#38bdf8",
+              "fill-opacity": 0.16,
+            },
+          });
+
+          map.addLayer({
+            id: "measurement-line",
+            type: "line",
+            source: "measurement-geometry",
+            filter: ["==", ["geometry-type"], "LineString"],
+            paint: {
+              "line-color": "#38bdf8",
+              "line-width": 3,
+              "line-dasharray": [2, 1],
+            },
+          });
+
+          map.addLayer({
+            id: "measurement-points",
+            type: "circle",
+            source: "measurement-geometry",
+            filter: ["==", ["geometry-type"], "Point"],
+            paint: {
+              "circle-radius": 5,
+              "circle-color": "#ffffff",
+              "circle-stroke-color": "#38bdf8",
+              "circle-stroke-width": 2,
+            },
+          });
+
+          setMapReady(true);
+          setMapError("");
         });
 
         map.on("error", () => {
@@ -87,12 +215,76 @@ export default function ExploreMap() {
 
         map.on("click", (event) => {
           const { lng, lat } = event.lngLat;
+          const mode = measurementModeRef.current;
+
+          if (mode !== "none") {
+            const nextPoints = [
+              ...measurementPointsRef.current,
+              { lng, lat },
+            ];
+
+            measurementPointsRef.current = nextPoints;
+            setMeasurementPoints(nextPoints);
+
+            const source = map?.getSource(
+              "measurement-geometry",
+            ) as GeoJSONSource | undefined;
+
+            if (source) {
+              const coordinates = nextPoints.map(
+                (point) => [point.lng, point.lat] as [number, number],
+              );
+
+              const features: GeoJSON.Feature[] = [];
+
+              if (mode === "distance" && coordinates.length >= 2) {
+                features.push({
+                  type: "Feature",
+                  properties: {},
+                  geometry: {
+                    type: "LineString",
+                    coordinates,
+                  },
+                });
+              }
+
+              if (mode === "area" && coordinates.length >= 3) {
+                features.push({
+                  type: "Feature",
+                  properties: {},
+                  geometry: {
+                    type: "Polygon",
+                    coordinates: [[...coordinates, coordinates[0]]],
+                  },
+                });
+              }
+
+              for (const coordinate of coordinates) {
+                features.push({
+                  type: "Feature",
+                  properties: {},
+                  geometry: {
+                    type: "Point",
+                    coordinates: coordinate,
+                  },
+                });
+              }
+
+              source.setData({
+                type: "FeatureCollection",
+                features,
+              });
+            }
+
+            return;
+          }
+
+          const activeMap = map;
+          if (!activeMap) return;
 
           setCoordinates({ lat, lng });
           setSearchValue(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
           setSearchError("");
-
-          if (!map) return;
 
           markerRef.current?.remove();
 
@@ -106,7 +298,7 @@ export default function ExploreMap() {
                 `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
               ),
             )
-            .addTo(map);
+            .addTo(activeMap);
         });
       } catch {
         if (!cancelled) {
@@ -183,7 +375,62 @@ export default function ExploreMap() {
     });
   };
 
+  const startMeasurement = (mode: Exclude<MeasurementMode, "none">) => {
+    measurementModeRef.current = mode;
+    measurementPointsRef.current = [];
+
+    setMeasurementMode(mode);
+    setMeasurementPoints([]);
+    setSearchError("");
+
+    markerRef.current?.remove();
+    markerRef.current = null;
+
+    const source = mapRef.current?.getSource(
+      "measurement-geometry",
+    ) as GeoJSONSource | undefined;
+
+    source?.setData({
+      type: "FeatureCollection",
+      features: [],
+    });
+  };
+
+  const finishMeasurement = () => {
+    measurementModeRef.current = "none";
+    setMeasurementMode("none");
+  };
+
+  const clearMeasurement = () => {
+    measurementPointsRef.current = [];
+    setMeasurementPoints([]);
+
+    const source = mapRef.current?.getSource(
+      "measurement-geometry",
+    ) as GeoJSONSource | undefined;
+
+    source?.setData({
+      type: "FeatureCollection",
+      features: [],
+    });
+  };
+
   const resetMap = () => {
+    measurementModeRef.current = "none";
+    measurementPointsRef.current = [];
+
+    setMeasurementMode("none");
+    setMeasurementPoints([]);
+
+    const source = mapRef.current?.getSource(
+      "measurement-geometry",
+    ) as GeoJSONSource | undefined;
+
+    source?.setData({
+      type: "FeatureCollection",
+      features: [],
+    });
+
     mapRef.current?.flyTo({
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
@@ -309,6 +556,138 @@ export default function ExploreMap() {
           </section>
 
           <aside className="space-y-5">
+            <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+              <div className="flex items-center gap-2">
+                <Ruler className="h-4 w-4 text-sky-400" />
+                <h2 className="text-sm font-medium">Measurement tools</h2>
+              </div>
+
+              <p className="mt-2 text-xs leading-5 text-white/45">
+                Choose a tool, then click points on the map to draw your measurement.
+              </p>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => startMeasurement("distance")}
+                  aria-pressed={measurementMode === "distance"}
+                  className={`rounded-xl border px-3 py-3 text-left text-xs transition ${
+                    measurementMode === "distance"
+                      ? "border-sky-400/60 bg-sky-400/10 text-sky-300"
+                      : "border-white/10 text-white/65 hover:border-sky-400/40"
+                  }`}
+                >
+                  <Ruler className="mb-2 h-4 w-4" />
+                  <span className="block font-medium">Distance</span>
+                  <span className="mt-1 block text-[10px] opacity-60">
+                    Measure a line
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => startMeasurement("area")}
+                  aria-pressed={measurementMode === "area"}
+                  className={`rounded-xl border px-3 py-3 text-left text-xs transition ${
+                    measurementMode === "area"
+                      ? "border-sky-400/60 bg-sky-400/10 text-sky-300"
+                      : "border-white/10 text-white/65 hover:border-sky-400/40"
+                  }`}
+                >
+                  <MapPin className="mb-2 h-4 w-4" />
+                  <span className="block font-medium">Land area</span>
+                  <span className="mt-1 block text-[10px] opacity-60">
+                    Outline a parcel
+                  </span>
+                </button>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-white/45">
+                    Measurement status
+                  </span>
+                  <span className="text-xs text-sky-300">
+                    {measurementMode === "none"
+                      ? "Inactive"
+                      : measurementMode === "distance"
+                        ? "Distance mode"
+                        : "Area mode"}
+                  </span>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
+                    {measurementMode === "area"
+                      ? "Estimated area"
+                      : "Total distance"}
+                  </p>
+
+                  <p className="mt-1 text-2xl font-medium tracking-tight text-white">
+                    {measurementMode === "area"
+                      ? measurementPoints.length >= 3
+                        ? formatArea(calculateArea(measurementPoints))
+                        : "—"
+                      : measurementPoints.length >= 2
+                        ? formatDistance(calculateDistance(measurementPoints))
+                        : "—"}
+                  </p>
+
+                  {measurementMode === "area" &&
+                    measurementPoints.length >= 3 && (
+                      <p className="mt-1 text-xs text-white/40">
+                        {calculateArea(measurementPoints).toLocaleString(
+                          undefined,
+                          { maximumFractionDigits: 2 },
+                        )}{" "}
+                        square meters
+                      </p>
+                    )}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3">
+                  <span className="text-xs text-white/45">Points added</span>
+                  <span className="font-mono text-sm text-white/80">
+                    {measurementPoints.length}
+                  </span>
+                </div>
+
+                {measurementMode === "area" &&
+                  measurementPoints.length < 3 && (
+                    <p className="mt-3 text-xs leading-5 text-amber-200/75">
+                      Add at least 3 points to calculate an area.
+                    </p>
+                  )}
+
+                {measurementMode === "distance" &&
+                  measurementPoints.length < 2 && (
+                    <p className="mt-3 text-xs leading-5 text-white/40">
+                      Add at least 2 points to calculate distance.
+                    </p>
+                  )}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={finishMeasurement}
+                  disabled={measurementMode === "none"}
+                  className="rounded-xl border border-white/10 px-3 py-2.5 text-xs text-white/70 transition hover:border-sky-400/40 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Finish drawing
+                </button>
+
+                <button
+                  type="button"
+                  onClick={clearMeasurement}
+                  disabled={measurementPoints.length === 0}
+                  className="rounded-xl border border-white/10 px-3 py-2.5 text-xs text-white/70 transition hover:border-rose-400/40 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Clear drawing
+                </button>
+              </div>
+            </section>
+
             <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-sky-400" />
