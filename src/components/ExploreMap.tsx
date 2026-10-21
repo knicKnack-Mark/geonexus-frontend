@@ -396,53 +396,12 @@ export default function ExploreMap() {
               "measurement-geometry",
             ) as GeoJSONSource | undefined;
 
-            if (source) {
-              const coordinates = nextPoints.map(
-                (point) => [point.lng, point.lat] as [number, number],
-              );
-
-              const features: GeoJSON.Feature[] = [];
-
-              if (mode === "distance" && coordinates.length >= 2) {
-                features.push({
-                  type: "Feature",
-                  properties: { kind: "distance" },
-                  geometry: {
-                    type: "LineString",
-                    coordinates,
-                  },
-                });
-              }
-
-              if (mode === "area" && coordinates.length >= 3) {
-                features.push({
-                  type: "Feature",
-                  properties: { kind: "area" },
-                  geometry: {
-                    type: "Polygon",
-                    coordinates: [[...coordinates, coordinates[0]]],
-                  },
-                });
-              }
-
-              for (const coordinate of coordinates) {
-                features.push({
-                  type: "Feature",
-                  properties: { kind: "measurement-point" },
-                  geometry: {
-                    type: "Point",
-                    coordinates: coordinate,
-                  },
-                });
-              }
-
-              const measurementGeometry: GeoJSON.FeatureCollection = {
-                type: "FeatureCollection",
-                features,
-              };
-              measurementGeometryRef.current = measurementGeometry;
-              source.setData(measurementGeometry);
-            }
+            const measurementGeometry = buildMeasurementGeoJSON(
+              nextPoints,
+              mode,
+            );
+            measurementGeometryRef.current = measurementGeometry;
+            source?.setData(measurementGeometry);
 
             return;
           }
@@ -573,6 +532,7 @@ export default function ExploreMap() {
 
   const clearMeasurement = () => {
     measurementPointsRef.current = [];
+    setMeasurementType(null);
     setMeasurementPoints([]);
     measurementGeometryRef.current = {
       type: "FeatureCollection",
@@ -916,6 +876,112 @@ export default function ExploreMap() {
           </section>
 
           <aside className="space-y-5">
+            <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-sky-400" />
+                <h2 className="text-sm font-medium">Saved projects</h2>
+              </div>
+
+              <p className="mt-2 text-xs leading-5 text-white/45">
+                Save this map view, selected location, and measurement drawing
+                in this browser.
+              </p>
+
+              <form
+                className="mt-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveProject();
+                }}
+              >
+                <label
+                  htmlFor="project-name"
+                  className="text-xs text-white/60"
+                >
+                  Project name
+                </label>
+                <input
+                  id="project-name"
+                  type="text"
+                  value={projectName}
+                  onChange={(event) => {
+                    setProjectName(event.target.value);
+                    setProjectMessage("");
+                  }}
+                  maxLength={80}
+                  placeholder="My survey project"
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-sky-400/60"
+                />
+                <button
+                  type="submit"
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-3 text-sm font-semibold text-[#07111c] transition hover:bg-sky-300"
+                >
+                  <Save className="h-4 w-4" />
+                  Save current project
+                </button>
+              </form>
+
+              {projectMessage && (
+                <p role="status" className="mt-3 text-xs leading-5 text-sky-200">
+                  {projectMessage}
+                </p>
+              )}
+
+              <div className="mt-4 space-y-2">
+                {savedProjects.length > 0 ? (
+                  savedProjects.map((project) => (
+                    <div
+                      key={project.id}
+                      className="rounded-xl border border-white/10 bg-black/20 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white/85">
+                            {project.name}
+                          </p>
+                          <p className="mt-1 text-[10px] text-white/40">
+                            Updated{" "}
+                            {new Date(project.updatedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => loadProject(project)}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-sky-400/25 px-2.5 py-2 text-xs text-sky-300 transition hover:bg-sky-400/10"
+                        >
+                          <FolderOpen className="h-3.5 w-3.5" />
+                          Load
+                        </button>
+                      </div>
+
+                      <div className="mt-3 flex gap-2 border-t border-white/10 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => renameProject(project)}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] text-white/55 transition hover:bg-white/5 hover:text-white"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteProject(project)}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] text-rose-300/75 transition hover:bg-rose-400/10 hover:text-rose-200"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-xs text-white/40">
+                    No saved projects yet.
+                  </p>
+                )}
+              </div>
+            </section>
+
             <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
               <div className="flex items-center gap-2">
                 <Ruler className="h-4 w-4 text-sky-400" />
