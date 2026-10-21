@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   GeoJSONSource,
@@ -11,13 +11,17 @@ import type {
 import {
   ArrowLeft,
   Crosshair,
+  FolderOpen,
   LocateFixed,
   MapPin,
+  Pencil,
   RotateCcw,
   Ruler,
+  Save,
   Search,
   Sun,
   Moon,
+  Trash2,
 } from "lucide-react";
 
 type Coordinates = {
@@ -29,8 +33,111 @@ type MeasurePoint = {
   lng: number;
   lat: number;
 };
+type SavedMapProject = {
+  id: string;
+  name: string;
+  updatedAt: string;
+  center: [number, number];
+  zoom: number;
+  selectedCoordinates: Coordinates | null;
+  measurementMode: MeasurementMode;
+  measurementType: "distance" | "area" | null;
+  measurementPoints: MeasurePoint[];
+};
+
+const PROJECTS_STORAGE_KEY = "geonexus-saved-projects-v1";
 
 const EARTH_RADIUS_METERS = 6_371_008.8;
+
+function buildMeasurementGeoJSON(
+  points: MeasurePoint[],
+  type: "distance" | "area" | null,
+): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  const coordinates = points.map(
+    (point) => [point.lng, point.lat] as [number, number],
+  );
+
+  if (type === "distance" && coordinates.length >= 2) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "distance" },
+      geometry: {
+        type: "LineString",
+        coordinates,
+      },
+    });
+  }
+
+  if (type === "area" && coordinates.length >= 3) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "area" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[...coordinates, coordinates[0]]],
+      },
+    });
+  }
+
+  for (const coordinate of coordinates) {
+    features.push({
+      type: "Feature",
+      properties: { kind: "measurement-point" },
+      geometry: {
+        type: "Point",
+        coordinates: coordinate,
+      },
+    });
+  }
+
+  return {
+    type: "FeatureCollection",
+    features,
+  };
+}
+
+function isSavedMapProject(value: unknown): value is SavedMapProject {
+  if (typeof value !== "object" || value === null) return false;
+
+  const project = value as Record<string, unknown>;
+  const center = project.center;
+  const selectedCoordinates = project.selectedCoordinates;
+  const points = project.measurementPoints;
+
+  return (
+    typeof project.id === "string" &&
+    typeof project.name === "string" &&
+    typeof project.updatedAt === "string" &&
+    Array.isArray(center) &&
+    center.length === 2 &&
+    center.every((coordinate) => typeof coordinate === "number") &&
+    typeof project.zoom === "number" &&
+    (project.measurementMode === "none" ||
+      project.measurementMode === "distance" ||
+      project.measurementMode === "area") &&
+    (project.measurementType === null ||
+      project.measurementType === "distance" ||
+      project.measurementType === "area") &&
+    (selectedCoordinates === null ||
+      (typeof selectedCoordinates === "object" &&
+        selectedCoordinates !== null &&
+        "lat" in selectedCoordinates &&
+        "lng" in selectedCoordinates &&
+        typeof selectedCoordinates.lat === "number" &&
+        typeof selectedCoordinates.lng === "number")) &&
+    Array.isArray(points) &&
+    points.every(
+      (point) =>
+        typeof point === "object" &&
+        point !== null &&
+        "lat" in point &&
+        "lng" in point &&
+        typeof point.lat === "number" &&
+        typeof point.lng === "number",
+    )
+  );
+}
 
 function calculateDistance(points: MeasurePoint[]): number {
   let total = 0;
@@ -119,10 +226,51 @@ export default function ExploreMap() {
   const [measurementPoints, setMeasurementPoints] =
     useState<MeasurePoint[]>([]);
   const [mapStyle, setMapStyle] = useState<"dark" | "light">("dark");
+  const [savedProjects, setSavedProjects] = useState<SavedMapProject[]>([]);
+  const [projectName, setProjectName] = useState("");
+  const [projectMessage, setProjectMessage] = useState("");
+  const [measurementType, setMeasurementType] = useState<
+    "distance" | "area" | null
+  >(null);
   const measurementGeometryRef = useRef<GeoJSON.FeatureCollection>({
     type: "FeatureCollection",
     features: [],
   });
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
+
+      if (!stored) return;
+
+      const parsed: unknown = JSON.parse(stored);
+
+      if (!Array.isArray(parsed)) {
+        startTransition(() => {
+          setProjectMessage(
+            "Saved projects could not be read. Try clearing invalid saved project data.",
+          );
+        });
+        return;
+      }
+
+      const projects = parsed.filter(isSavedMapProject);
+      startTransition(() => {
+        if (projects.length !== parsed.length) {
+          setProjectMessage(
+            "Some saved projects were invalid and could not be loaded.",
+          );
+        }
+        setSavedProjects(projects);
+      });
+    } catch {
+      startTransition(() => {
+        setProjectMessage(
+          "Saved projects could not be read. Try clearing invalid saved project data.",
+        );
+      });
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -258,7 +406,7 @@ export default function ExploreMap() {
               if (mode === "distance" && coordinates.length >= 2) {
                 features.push({
                   type: "Feature",
-                  properties: {},
+                  properties: { kind: "distance" },
                   geometry: {
                     type: "LineString",
                     coordinates,
@@ -269,7 +417,7 @@ export default function ExploreMap() {
               if (mode === "area" && coordinates.length >= 3) {
                 features.push({
                   type: "Feature",
-                  properties: {},
+                  properties: { kind: "area" },
                   geometry: {
                     type: "Polygon",
                     coordinates: [[...coordinates, coordinates[0]]],
@@ -280,7 +428,7 @@ export default function ExploreMap() {
               for (const coordinate of coordinates) {
                 features.push({
                   type: "Feature",
-                  properties: {},
+                  properties: { kind: "measurement-point" },
                   geometry: {
                     type: "Point",
                     coordinates: coordinate,
@@ -398,6 +546,7 @@ export default function ExploreMap() {
   const startMeasurement = (mode: Exclude<MeasurementMode, "none">) => {
     measurementModeRef.current = mode;
     measurementPointsRef.current = [];
+    setMeasurementType(mode);
     measurementGeometryRef.current = {
       type: "FeatureCollection",
       features: [],
@@ -437,6 +586,171 @@ export default function ExploreMap() {
     source?.setData(measurementGeometryRef.current);
   };
 
+  const persistProjects = (projects: SavedMapProject[]) => {
+    try {
+      localStorage.setItem(
+        PROJECTS_STORAGE_KEY,
+        JSON.stringify(projects),
+      );
+
+      setSavedProjects(projects);
+      return true;
+    } catch {
+      setProjectMessage(
+        "Could not save the project. Browser storage may be full or unavailable.",
+      );
+      return false;
+    }
+  };
+
+  const saveProject = () => {
+    const map = mapRef.current;
+    const name = projectName.trim();
+
+    if (!map) {
+      setProjectMessage("Wait for the map to finish loading.");
+      return;
+    }
+
+    if (!name) {
+      setProjectMessage("Enter a name for your project first.");
+      return;
+    }
+
+    const center = map.getCenter();
+
+    const project: SavedMapProject = {
+      id: crypto.randomUUID(),
+      name,
+      updatedAt: new Date().toISOString(),
+      center: [center.lng, center.lat],
+      zoom: map.getZoom(),
+      selectedCoordinates: coordinates,
+      measurementMode: measurementModeRef.current,
+      measurementType,
+      measurementPoints: [...measurementPointsRef.current],
+    };
+
+    const nextProjects = [project, ...savedProjects];
+
+    if (persistProjects(nextProjects)) {
+      setProjectName("");
+      setProjectMessage(`"${name}" saved successfully.`);
+    }
+  };
+
+  const loadProject = (project: SavedMapProject) => {
+    const map = mapRef.current;
+
+    if (!map) {
+      setProjectMessage("The map is still loading. Try again shortly.");
+      return;
+    }
+
+    measurementModeRef.current = project.measurementMode;
+    measurementPointsRef.current = [...project.measurementPoints];
+    measurementGeometryRef.current = buildMeasurementGeoJSON(
+      project.measurementPoints,
+      project.measurementType,
+    );
+
+    setMeasurementMode(project.measurementMode);
+    setMeasurementType(project.measurementType);
+    setMeasurementPoints([...project.measurementPoints]);
+    setCoordinates(project.selectedCoordinates);
+    setSearchError("");
+    setSearchValue(
+      project.selectedCoordinates
+        ? `${project.selectedCoordinates.lat.toFixed(6)}, ${project.selectedCoordinates.lng.toFixed(6)}`
+        : "",
+    );
+
+    markerRef.current?.remove();
+    markerRef.current = null;
+
+    map.flyTo({
+      center: project.center,
+      zoom: project.zoom,
+      essential: true,
+    });
+
+    const source = map.getSource(
+      "measurement-geometry",
+    ) as GeoJSONSource | undefined;
+
+    source?.setData(measurementGeometryRef.current);
+
+    if (project.selectedCoordinates) {
+      const selected = project.selectedCoordinates;
+
+      void import("maplibre-gl").then((maplibregl) => {
+        if (mapRef.current !== map) return;
+
+        markerRef.current?.remove();
+
+        markerRef.current = new maplibregl.Marker({
+          color: "#38bdf8",
+          scale: 1.1,
+        })
+          .setLngLat([selected.lng, selected.lat])
+          .setPopup(
+            new maplibregl.Popup({ offset: 22 }).setText(
+              `${selected.lat.toFixed(6)}, ${selected.lng.toFixed(6)}`,
+            ),
+          )
+          .addTo(map);
+      });
+    }
+
+    setProjectMessage(`Loaded "${project.name}".`);
+  };
+
+  const renameProject = (project: SavedMapProject) => {
+    const newName = window.prompt(
+      "Enter a new project name:",
+      project.name,
+    );
+
+    if (newName === null) return;
+
+    const trimmedName = newName.trim();
+
+    if (!trimmedName) {
+      setProjectMessage("Project name cannot be empty.");
+      return;
+    }
+
+    const nextProjects = savedProjects.map((item) =>
+      item.id === project.id
+        ? {
+            ...item,
+            name: trimmedName,
+            updatedAt: new Date().toISOString(),
+          }
+        : item,
+    );
+
+    if (persistProjects(nextProjects)) {
+      setProjectMessage(`Project renamed to "${trimmedName}".`);
+    }
+  };
+
+  const deleteProject = (project: SavedMapProject) => {
+    const confirmed = window.confirm(
+      `Delete "${project.name}"? This cannot be undone.`,
+    );
+
+    if (!confirmed) return;
+
+    const nextProjects = savedProjects.filter(
+      (item) => item.id !== project.id,
+    );
+
+    if (persistProjects(nextProjects)) {
+      setProjectMessage(`Deleted "${project.name}".`);
+    }
+  };
+
   const toggleMapStyle = () => {
     const nextStyle = mapStyle === "dark" ? "bright" : "dark";
     mapRef.current?.setStyle(
@@ -448,6 +762,7 @@ export default function ExploreMap() {
   const resetMap = () => {
     measurementModeRef.current = "none";
     measurementPointsRef.current = [];
+    setMeasurementType(null);
     measurementGeometryRef.current = {
       type: "FeatureCollection",
       features: [],
