@@ -16,6 +16,8 @@ import {
   RotateCcw,
   Ruler,
   Search,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 type Coordinates = {
@@ -116,6 +118,11 @@ export default function ExploreMap() {
     useState<MeasurementMode>("none");
   const [measurementPoints, setMeasurementPoints] =
     useState<MeasurePoint[]>([]);
+  const [mapStyle, setMapStyle] = useState<"dark" | "light">("dark");
+  const measurementGeometryRef = useRef<GeoJSON.FeatureCollection>({
+    type: "FeatureCollection",
+    features: [],
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -129,12 +136,18 @@ export default function ExploreMap() {
 
         if (cancelled || !containerRef.current) return;
 
+        maplibregl.setWorkerUrl(
+          new URL(
+            "../../node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs",
+            import.meta.url,
+          ).toString(),
+        );
+
         map = new maplibregl.Map({
           container: containerRef.current,
-          style: "https://tiles.openfreemap.org/styles/dark",
+          style: `https://tiles.openfreemap.org/styles/${mapStyle}`,
           center: INITIAL_CENTER,
           zoom: INITIAL_ZOOM,
-          attributionControl: true,
           maxZoom: 19,
         });
 
@@ -154,52 +167,57 @@ export default function ExploreMap() {
           "bottom-left",
         );
 
-        map.on("load", () => {
+        map.on("style.load", () => {
           if (cancelled || !map) return;
 
-          map.addSource("measurement-geometry", {
-            type: "geojson",
-            data: {
-              type: "FeatureCollection",
-              features: [],
-            },
-          });
+          if (!map.getSource("measurement-geometry")) {
+            map.addSource("measurement-geometry", {
+              type: "geojson",
+              data: measurementGeometryRef.current,
+            });
+          }
 
-          map.addLayer({
-            id: "measurement-area-fill",
-            type: "fill",
-            source: "measurement-geometry",
-            filter: ["==", ["geometry-type"], "Polygon"],
-            paint: {
-              "fill-color": "#38bdf8",
-              "fill-opacity": 0.16,
-            },
-          });
+          if (!map.getLayer("measurement-area-fill")) {
+            map.addLayer({
+              id: "measurement-area-fill",
+              type: "fill",
+              source: "measurement-geometry",
+              filter: ["==", ["geometry-type"], "Polygon"],
+              paint: {
+                "fill-color": "#38bdf8",
+                "fill-opacity": 0.16,
+              },
+            });
+          }
 
-          map.addLayer({
-            id: "measurement-line",
-            type: "line",
-            source: "measurement-geometry",
-            filter: ["==", ["geometry-type"], "LineString"],
-            paint: {
-              "line-color": "#38bdf8",
-              "line-width": 3,
-              "line-dasharray": [2, 1],
-            },
-          });
+          if (!map.getLayer("measurement-line")) {
+            map.addLayer({
+              id: "measurement-line",
+              type: "line",
+              source: "measurement-geometry",
+              filter: ["==", ["geometry-type"], "LineString"],
+              paint: {
+                "line-color": "#38bdf8",
+                "line-width": 3,
+                "line-dasharray": [2, 1],
+              },
+            });
+          }
 
-          map.addLayer({
-            id: "measurement-points",
-            type: "circle",
-            source: "measurement-geometry",
-            filter: ["==", ["geometry-type"], "Point"],
-            paint: {
-              "circle-radius": 5,
-              "circle-color": "#ffffff",
-              "circle-stroke-color": "#38bdf8",
-              "circle-stroke-width": 2,
-            },
-          });
+          if (!map.getLayer("measurement-points")) {
+            map.addLayer({
+              id: "measurement-points",
+              type: "circle",
+              source: "measurement-geometry",
+              filter: ["==", ["geometry-type"], "Point"],
+              paint: {
+                "circle-radius": 5,
+                "circle-color": "#ffffff",
+                "circle-stroke-color": "#38bdf8",
+                "circle-stroke-width": 2,
+              },
+            });
+          }
 
           setMapReady(true);
           setMapError("");
@@ -270,10 +288,12 @@ export default function ExploreMap() {
                 });
               }
 
-              source.setData({
+              const measurementGeometry: GeoJSON.FeatureCollection = {
                 type: "FeatureCollection",
                 features,
-              });
+              };
+              measurementGeometryRef.current = measurementGeometry;
+              source.setData(measurementGeometry);
             }
 
             return;
@@ -378,6 +398,10 @@ export default function ExploreMap() {
   const startMeasurement = (mode: Exclude<MeasurementMode, "none">) => {
     measurementModeRef.current = mode;
     measurementPointsRef.current = [];
+    measurementGeometryRef.current = {
+      type: "FeatureCollection",
+      features: [],
+    };
 
     setMeasurementMode(mode);
     setMeasurementPoints([]);
@@ -390,10 +414,7 @@ export default function ExploreMap() {
       "measurement-geometry",
     ) as GeoJSONSource | undefined;
 
-    source?.setData({
-      type: "FeatureCollection",
-      features: [],
-    });
+    source?.setData(measurementGeometryRef.current);
   };
 
   const finishMeasurement = () => {
@@ -404,20 +425,33 @@ export default function ExploreMap() {
   const clearMeasurement = () => {
     measurementPointsRef.current = [];
     setMeasurementPoints([]);
+    measurementGeometryRef.current = {
+      type: "FeatureCollection",
+      features: [],
+    };
 
     const source = mapRef.current?.getSource(
       "measurement-geometry",
     ) as GeoJSONSource | undefined;
 
-    source?.setData({
-      type: "FeatureCollection",
-      features: [],
-    });
+    source?.setData(measurementGeometryRef.current);
+  };
+
+  const toggleMapStyle = () => {
+    const nextStyle = mapStyle === "dark" ? "bright" : "dark";
+    mapRef.current?.setStyle(
+      `https://tiles.openfreemap.org/styles/${nextStyle}`,
+    );
+    setMapStyle(nextStyle === "bright" ? "light" : "dark");
   };
 
   const resetMap = () => {
     measurementModeRef.current = "none";
     measurementPointsRef.current = [];
+    measurementGeometryRef.current = {
+      type: "FeatureCollection",
+      features: [],
+    };
 
     setMeasurementMode("none");
     setMeasurementPoints([]);
@@ -426,10 +460,7 @@ export default function ExploreMap() {
       "measurement-geometry",
     ) as GeoJSONSource | undefined;
 
-    source?.setData({
-      type: "FeatureCollection",
-      features: [],
-    });
+    source?.setData(measurementGeometryRef.current);
 
     mapRef.current?.flyTo({
       center: INITIAL_CENTER,
@@ -527,6 +558,20 @@ export default function ExploreMap() {
                 </p>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={toggleMapStyle}
+              aria-label={`Switch to ${mapStyle === "dark" ? "light" : "dark"} map`}
+              className="absolute right-4 top-20 z-10 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#080d18]/90 px-3 py-2.5 text-xs text-white/80 shadow-lg backdrop-blur-md transition hover:border-sky-400/40 hover:text-sky-300"
+            >
+              {mapStyle === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+              {mapStyle === "dark" ? "Light map" : "Dark map"}
+            </button>
 
             <div
               ref={containerRef}
