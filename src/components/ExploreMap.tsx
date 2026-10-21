@@ -145,7 +145,7 @@ export default function ExploreMap() {
 
         map = new maplibregl.Map({
           container: containerRef.current,
-          style: `https://tiles.openfreemap.org/styles/${mapStyle}`,
+          style: "https://tiles.openfreemap.org/styles/dark",
           center: INITIAL_CENTER,
           zoom: INITIAL_ZOOM,
           maxZoom: 19,
