@@ -12,6 +12,7 @@ const navigationLinks = [
   { label: "Metrics", href: "#stats" },
   { label: "Approach", href: "#approach" },
   { label: "Contact", href: "#contact" },
+  { label: "Explore", href: "/explore" },
 ];
 
 export default function SiteNavigation() {
