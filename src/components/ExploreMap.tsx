@@ -880,15 +880,18 @@ export default function ExploreMap() {
               <div className="flex items-center gap-2">
                 <FolderOpen className="h-4 w-4 text-sky-400" />
                 <h2 className="text-sm font-medium">Saved projects</h2>
+                <span className="ml-auto rounded-full border border-white/10 px-2 py-1 text-[10px] text-white/50">
+                  {savedProjects.length}
+                </span>
               </div>
 
               <p className="mt-2 text-xs leading-5 text-white/45">
-                Save this map view, selected location, and measurement drawing
-                in this browser.
+                Save your current map view, selected coordinates, and measurement
+                geometry for later.
               </p>
 
               <form
-                className="mt-4"
+                className="mt-4 space-y-3"
                 onSubmit={(event) => {
                   event.preventDefault();
                   saveProject();
@@ -903,18 +906,15 @@ export default function ExploreMap() {
                 <input
                   id="project-name"
                   type="text"
-                  value={projectName}
-                  onChange={(event) => {
-                    setProjectName(event.target.value);
-                    setProjectMessage("");
-                  }}
                   maxLength={80}
-                  placeholder="My survey project"
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-sky-400/60"
+                  value={projectName}
+                  onChange={(event) => setProjectName(event.target.value)}
+                  placeholder="e.g. Site Survey - Naga"
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-sky-400/60"
                 />
                 <button
                   type="submit"
-                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-3 text-sm font-semibold text-[#07111c] transition hover:bg-sky-300"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-3 text-sm font-semibold text-[#07111c] transition hover:bg-sky-300"
                 >
                   <Save className="h-4 w-4" />
                   Save current project
@@ -922,62 +922,78 @@ export default function ExploreMap() {
               </form>
 
               {projectMessage && (
-                <p role="status" className="mt-3 text-xs leading-5 text-sky-200">
+                <p
+                  role="status"
+                  className="mt-3 text-xs leading-5 text-sky-300"
+                >
                   {projectMessage}
                 </p>
               )}
 
-              <div className="mt-4 space-y-2">
-                {savedProjects.length > 0 ? (
-                  savedProjects.map((project) => (
-                    <div
-                      key={project.id}
-                      className="rounded-xl border border-white/10 bg-black/20 p-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white/85">
-                            {project.name}
-                          </p>
-                          <p className="mt-1 text-[10px] text-white/40">
-                            Updated{" "}
-                            {new Date(project.updatedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => loadProject(project)}
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-sky-400/25 px-2.5 py-2 text-xs text-sky-300 transition hover:bg-sky-400/10"
-                        >
-                          <FolderOpen className="h-3.5 w-3.5" />
-                          Load
-                        </button>
-                      </div>
+              <div className="mt-5 border-t border-white/10 pt-4">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-white/40">
+                  Your projects
+                </p>
 
-                      <div className="mt-3 flex gap-2 border-t border-white/10 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => renameProject(project)}
-                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] text-white/55 transition hover:bg-white/5 hover:text-white"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteProject(project)}
-                          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] text-rose-300/75 transition hover:bg-rose-400/10 hover:text-rose-200"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                {savedProjects.length === 0 ? (
+                  <div className="mt-3 rounded-xl border border-dashed border-white/10 px-4 py-6 text-center">
+                    <FolderOpen className="mx-auto h-5 w-5 text-white/30" />
+                    <p className="mt-3 text-sm text-white/55">
+                      No saved projects yet
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-white/35">
+                      Name your current map and save it to get started.
+                    </p>
+                  </div>
                 ) : (
-                  <p className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-xs text-white/40">
-                    No saved projects yet.
-                  </p>
+                  <div className="mt-3 space-y-3">
+                    {savedProjects.map((project) => (
+                      <div
+                        key={project.id}
+                        className="rounded-xl border border-white/10 bg-black/15 p-3"
+                      >
+                        <p className="break-words text-sm font-medium text-white/85">
+                          {project.name}
+                        </p>
+
+                        <p className="mt-1 text-[10px] leading-5 text-white/40">
+                          Updated{" "}
+                          {new Date(project.updatedAt).toLocaleString()}
+                        </p>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => loadProject(project)}
+                            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white/[0.07] px-3 py-2 text-xs text-sky-300 transition hover:bg-sky-400/10"
+                          >
+                            <FolderOpen className="h-3.5 w-3.5" />
+                            Open
+                          </button>
+
+                          <button
+                            type="button"
+                            aria-label={`Rename ${project.name}`}
+                            title="Rename project"
+                            onClick={() => renameProject(project)}
+                            className="rounded-lg border border-white/10 p-2 text-white/55 transition hover:border-sky-400/40 hover:text-sky-300"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            aria-label={`Delete ${project.name}`}
+                            title="Delete project"
+                            onClick={() => deleteProject(project)}
+                            className="rounded-lg border border-white/10 p-2 text-white/55 transition hover:border-rose-400/40 hover:text-rose-300"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </section>
