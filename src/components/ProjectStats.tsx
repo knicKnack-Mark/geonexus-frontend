@@ -12,7 +12,7 @@ import {
 const stats = [
   {
     id: "projects",
-    value: 0,
+    value: 32,
     suffix: "",
     label: "Projects completed",
     description: "Verified project portfolio",
@@ -20,7 +20,7 @@ const stats = [
   },
   {
     id: "hectares",
-    value: 0,
+    value: 50,
     suffix: " ha",
     label: "Land surveyed",
     description: "Documented survey coverage",
@@ -28,7 +28,7 @@ const stats = [
   },
   {
     id: "experience",
-    value: 0,
+    value: 3,
     suffix: "+",
     label: "Years of experience",
     description: "Professional experience",
@@ -36,7 +36,7 @@ const stats = [
   },
   {
     id: "accuracy",
-    value: 0,
+    value: 98.99,
     suffix: "%",
     label: "Quality assurance",
     description: "Target to be defined",
