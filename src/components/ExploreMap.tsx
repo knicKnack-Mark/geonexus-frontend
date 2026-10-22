@@ -2,6 +2,7 @@
 "use client";
 
 import { startTransition, useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import Link from "next/link";
 import type {
   GeoJSONSource,
@@ -11,6 +12,8 @@ import type {
 import {
   ArrowLeft,
   Crosshair,
+  Download,
+  FileUp,
   FolderOpen,
   LocateFixed,
   MapPin,
@@ -33,6 +36,10 @@ type MeasurePoint = {
   lng: number;
   lat: number;
 };
+type ImportedGeoJSON = {
+  type: "FeatureCollection";
+  features: GeoJSON.Feature[];
+};
 type SavedMapProject = {
   id: string;
   name: string;
@@ -43,11 +50,107 @@ type SavedMapProject = {
   measurementMode: MeasurementMode;
   measurementType: "distance" | "area" | null;
   measurementPoints: MeasurePoint[];
+  importedFeatures?: GeoJSON.Feature[];
 };
 
 const PROJECTS_STORAGE_KEY = "geonexus-saved-projects-v1";
 
 const EARTH_RADIUS_METERS = 6_371_008.8;
+const SUPPORTED_GEOMETRY_TYPES = [
+  "Point",
+  "MultiPoint",
+  "LineString",
+  "MultiLineString",
+  "Polygon",
+  "MultiPolygon",
+  "GeometryCollection",
+];
+
+function ensureImportedLayers(map: MapLibreMap) {
+  if (map.getSource("imported-geojson")) return;
+
+  map.addSource("imported-geojson", {
+    type: "geojson",
+    data: {
+      type: "FeatureCollection",
+      features: [],
+    },
+  });
+
+  map.addLayer({
+    id: "imported-polygons",
+    type: "fill",
+    source: "imported-geojson",
+    filter: ["==", ["geometry-type"], "Polygon"],
+    paint: {
+      "fill-color": "#a78bfa",
+      "fill-opacity": 0.16,
+    },
+  });
+
+  map.addLayer({
+    id: "imported-lines",
+    type: "line",
+    source: "imported-geojson",
+    filter: ["==", ["geometry-type"], "LineString"],
+    paint: {
+      "line-color": "#a78bfa",
+      "line-width": 3,
+    },
+  });
+
+  map.addLayer({
+    id: "imported-points",
+    type: "circle",
+    source: "imported-geojson",
+    filter: ["==", ["geometry-type"], "Point"],
+    paint: {
+      "circle-radius": 6,
+      "circle-color": "#a78bfa",
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1.5,
+    },
+  });
+}
+
+function isSupportedGeoJSONGeometry(
+  value: unknown,
+): value is GeoJSON.Geometry {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+
+  const geometry = value as {
+    type: unknown;
+    coordinates?: unknown;
+    geometries?: unknown;
+  };
+
+  if (geometry.type === "GeometryCollection") {
+    return (
+      Array.isArray(geometry.geometries) &&
+      geometry.geometries.every(isSupportedGeoJSONGeometry)
+    );
+  }
+
+  return (
+    SUPPORTED_GEOMETRY_TYPES.includes(String(geometry.type)) &&
+    Array.isArray(geometry.coordinates)
+  );
+}
+
+function isImportedFeature(value: unknown): value is GeoJSON.Feature {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+
+  const feature = value as { type: unknown; geometry?: unknown };
+
+  return (
+    feature.type === "Feature" &&
+    isSupportedGeoJSONGeometry(feature.geometry)
+  );
+}
 
 function buildMeasurementGeoJSON(
   points: MeasurePoint[],
@@ -104,6 +207,7 @@ function isSavedMapProject(value: unknown): value is SavedMapProject {
   const center = project.center;
   const selectedCoordinates = project.selectedCoordinates;
   const points = project.measurementPoints;
+  const importedFeatures = project.importedFeatures;
 
   return (
     typeof project.id === "string" &&
@@ -135,7 +239,10 @@ function isSavedMapProject(value: unknown): value is SavedMapProject {
         "lng" in point &&
         typeof point.lat === "number" &&
         typeof point.lng === "number",
-    )
+    ) &&
+    (importedFeatures === undefined ||
+      (Array.isArray(importedFeatures) &&
+        importedFeatures.every(isImportedFeature)))
   );
 }
 
@@ -225,6 +332,12 @@ export default function ExploreMap() {
     useState<MeasurementMode>("none");
   const [measurementPoints, setMeasurementPoints] =
     useState<MeasurePoint[]>([]);
+  const [importedFeatures, setImportedFeatures] =
+    useState<GeoJSON.Feature[]>([]);
+  const importedFeaturesRef = useRef<GeoJSON.Feature[]>([]);
+  const [geoJSONMessage, setGeoJSONMessage] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [mapStyle, setMapStyle] = useState<"dark" | "light">("dark");
   const [savedProjects, setSavedProjects] = useState<SavedMapProject[]>([]);
   const [projectName, setProjectName] = useState("");
@@ -366,6 +479,15 @@ export default function ExploreMap() {
               },
             });
           }
+
+          ensureImportedLayers(map);
+          const importedSource = map.getSource(
+            "imported-geojson",
+          ) as GeoJSONSource | undefined;
+          importedSource?.setData({
+            type: "FeatureCollection",
+            features: importedFeaturesRef.current,
+          });
 
           setMapReady(true);
           setMapError("");
@@ -589,6 +711,7 @@ export default function ExploreMap() {
       measurementMode: measurementModeRef.current,
       measurementType,
       measurementPoints: [...measurementPointsRef.current],
+      importedFeatures: [...importedFeatures],
     };
 
     const nextProjects = [project, ...savedProjects];
@@ -639,6 +762,22 @@ export default function ExploreMap() {
     ) as GeoJSONSource | undefined;
 
     source?.setData(measurementGeometryRef.current);
+
+    const restoredFeatures = project.importedFeatures ?? [];
+
+    ensureImportedLayers(map);
+
+    const importedSource = map.getSource(
+      "imported-geojson",
+    ) as GeoJSONSource | undefined;
+
+    importedSource?.setData({
+      type: "FeatureCollection",
+      features: restoredFeatures,
+    });
+
+    importedFeaturesRef.current = restoredFeatures;
+    setImportedFeatures(restoredFeatures);
 
     if (project.selectedCoordinates) {
       const selected = project.selectedCoordinates;
@@ -750,6 +889,245 @@ export default function ExploreMap() {
     setCoordinates(null);
     setSearchValue("");
     setSearchError("");
+  };
+
+  const handleGeoJSONImport = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    setIsImporting(true);
+    setGeoJSONMessage("");
+
+    try {
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error("Choose a GeoJSON file smaller than 10 MB.");
+      }
+
+      const parsed: unknown = JSON.parse(await file.text());
+
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("The file does not contain a valid GeoJSON object.");
+      }
+
+      const value = parsed as {
+        type?: unknown;
+        features?: unknown;
+        geometry?: unknown;
+        coordinates?: unknown;
+        properties?: unknown;
+      };
+
+      let features: GeoJSON.Feature[];
+
+      if (
+        value.type === "FeatureCollection" &&
+        Array.isArray(value.features)
+      ) {
+        features = value.features as GeoJSON.Feature[];
+      } else if (value.type === "Feature" && value.geometry) {
+        features = [value as GeoJSON.Feature];
+      } else if (
+        [
+          "Point",
+          "MultiPoint",
+          "LineString",
+          "MultiLineString",
+          "Polygon",
+          "MultiPolygon",
+          "GeometryCollection",
+        ].includes(String(value.type))
+      ) {
+        features = [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: value as unknown as GeoJSON.Geometry,
+          },
+        ];
+      } else {
+        throw new Error(
+          "Unsupported format. Choose a GeoJSON Feature, FeatureCollection, or geometry.",
+        );
+      }
+
+      if (features.length === 0) {
+        throw new Error("The GeoJSON file contains no features.");
+      }
+
+      if (!features.every(isImportedFeature)) {
+        throw new Error("The file contains an unsupported or invalid feature.");
+      }
+
+      const map = mapRef.current;
+
+      if (!map || !map.isStyleLoaded()) {
+        throw new Error("Wait for the map to finish loading, then try again.");
+      }
+
+      ensureImportedLayers(map);
+
+      const source = map.getSource(
+        "imported-geojson",
+      ) as GeoJSONSource | undefined;
+
+      if (!source) {
+        throw new Error("Could not initialize the imported map layer.");
+      }
+
+      const collection: ImportedGeoJSON = {
+        type: "FeatureCollection",
+        features,
+      };
+
+      source.setData(collection);
+      importedFeaturesRef.current = features;
+      setImportedFeatures(features);
+
+      const coordinates: [number, number][] = [];
+
+      const collectCoordinates = (input: unknown) => {
+        if (!Array.isArray(input)) return;
+
+        if (
+          input.length >= 2 &&
+          typeof input[0] === "number" &&
+          typeof input[1] === "number"
+        ) {
+          const [lng, lat] = input;
+
+          if (
+            Number.isFinite(lng) &&
+            Number.isFinite(lat) &&
+            lng >= -180 &&
+            lng <= 180 &&
+            lat >= -90 &&
+            lat <= 90
+          ) {
+            coordinates.push([lng, lat]);
+          }
+
+          return;
+        }
+
+        input.forEach(collectCoordinates);
+      };
+
+      const collectGeometry = (geometry: GeoJSON.Geometry) => {
+        if (geometry.type === "GeometryCollection") {
+          geometry.geometries.forEach(collectGeometry);
+        } else {
+          collectCoordinates(geometry.coordinates);
+        }
+      };
+
+      features.forEach((feature) => collectGeometry(feature.geometry));
+
+      if (coordinates.length > 0) {
+        const maplibregl = await import("maplibre-gl");
+
+        const bounds = new maplibregl.LngLatBounds();
+
+        coordinates.forEach((coordinate) => bounds.extend(coordinate));
+
+        map.fitBounds(bounds, {
+          padding: 70,
+          maxZoom: 16,
+          duration: 900,
+        });
+      }
+
+      setGeoJSONMessage(
+        `Imported ${features.length} feature${features.length === 1 ? "" : "s"} from ${file.name}.`,
+      );
+    } catch (error) {
+      setGeoJSONMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to import this GeoJSON file.",
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const exportGeoJSON = () => {
+    const features: GeoJSON.Feature[] = [...importedFeatures];
+
+    if (measurementPoints.length > 0) {
+      features.push(
+        ...buildMeasurementGeoJSON(
+          measurementPoints,
+          measurementType,
+        ).features,
+      );
+    }
+
+    if (coordinates) {
+      features.push({
+        type: "Feature",
+        properties: {
+          name: "Selected location",
+          source: "GeoNexus",
+        },
+        geometry: {
+          type: "Point",
+          coordinates: [coordinates.lng, coordinates.lat],
+        },
+      });
+    }
+
+    if (features.length === 0) {
+      setGeoJSONMessage(
+        "Nothing to export yet. Select a location, measure a line or area, or import a file first.",
+      );
+      return;
+    }
+
+    const collection: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features,
+    };
+
+    const blob = new Blob(
+      [JSON.stringify(collection, null, 2)],
+      { type: "application/geo+json" },
+    );
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `geonexus-export-${new Date().toISOString().slice(0, 10)}.geojson`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    setGeoJSONMessage(
+      `Exported ${features.length} feature${features.length === 1 ? "" : "s"}.`,
+    );
+  };
+
+  const clearImportedFeatures = () => {
+    const map = mapRef.current;
+
+    const source = map?.getSource(
+      "imported-geojson",
+    ) as GeoJSONSource | undefined;
+
+    source?.setData({
+      type: "FeatureCollection",
+      features: [],
+    });
+
+    importedFeaturesRef.current = [];
+    setImportedFeatures([]);
+    setGeoJSONMessage("Imported features cleared from the map.");
   };
 
   return (
@@ -876,6 +1254,74 @@ export default function ExploreMap() {
           </section>
 
           <aside className="space-y-5">
+            <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+              <div className="flex items-center gap-2">
+                <FileUp className="h-4 w-4 text-sky-400" />
+                <h2 className="text-sm font-medium">GeoJSON exchange</h2>
+              </div>
+
+              <p className="mt-2 text-xs leading-5 text-white/45">
+                Import geographic features or export your current map work for
+                use in compatible GIS applications.
+              </p>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".geojson,.json,application/geo+json,application/json"
+                onChange={handleGeoJSONImport}
+                className="hidden"
+                aria-label="Choose a GeoJSON file"
+              />
+
+              <button
+                type="button"
+                disabled={isImporting || !mapReady}
+                onClick={() => fileInputRef.current?.click()}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/80 transition hover:border-sky-400/40 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <FileUp className="h-4 w-4" />
+                {isImporting ? "Importing file..." : "Import GeoJSON"}
+              </button>
+
+              <button
+                type="button"
+                onClick={exportGeoJSON}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-3 text-sm font-semibold text-[#07111c] transition hover:bg-sky-300"
+              >
+                <Download className="h-4 w-4" />
+                Export GeoJSON
+              </button>
+
+              <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
+                <div>
+                  <p className="text-xs text-white/65">Imported features</p>
+                  <p className="mt-1 text-[10px] text-white/40">
+                    {importedFeatures.length} feature
+                    {importedFeatures.length === 1 ? "" : "s"} on the map
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={importedFeatures.length === 0}
+                  onClick={clearImportedFeatures}
+                  className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white/65 transition hover:border-rose-400/40 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Clear imports
+                </button>
+              </div>
+
+              {geoJSONMessage && (
+                <p
+                  role="status"
+                  className="mt-3 break-words text-xs leading-5 text-sky-300"
+                >
+                  {geoJSONMessage}
+                </p>
+              )}
+            </section>
+
             <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
               <div className="flex items-center gap-2">
                 <FolderOpen className="h-4 w-4 text-sky-400" />
