@@ -13,7 +13,7 @@ import {
   Send,
 } from "lucide-react";
 
-const BUSINESS_EMAIL = "hello@example.com";
+const BUSINESS_EMAIL = "geonex@example.com";
 
 const services = [
   "Geodetic Surveying",
