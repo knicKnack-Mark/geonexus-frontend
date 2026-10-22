@@ -70,7 +70,7 @@ function ProjectVisual({
       <svg
         viewBox="0 0 600 360"
         preserveAspectRatio="xMidYMid meet"
-        className="absolute inset-0 h-full w-full"
+        className="absolute inset-0 h-full w-full transition-transform duration-700 ease-out group-hover:scale-105 group-hover:rotate-[1deg] motion-reduce:transition-none"
         fill="none"
         aria-hidden="true"
       >
@@ -192,8 +192,13 @@ function ProjectVisual({
         )}
       </svg>
 
-      <div className="absolute left-4 top-4 flex items-center gap-2 border border-white/10 bg-black/35 px-3 py-2 backdrop-blur-sm">
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-neon)]" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent transition-transform duration-1000 ease-out group-hover:translate-x-[300%] motion-reduce:transition-none"
+      />
+
+      <div className="absolute left-4 top-4 flex items-center gap-2 border border-white/10 bg-black/35 px-3 py-2 backdrop-blur-sm transition-colors duration-300 group-hover:border-[var(--color-neon)]/40">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-neon)] group-hover:animate-pulse" />
         <span className="font-[var(--font-ibm-plex-mono)] text-[9px] tracking-wider text-white/70">
           CONCEPT VISUAL
         </span>
@@ -244,7 +249,7 @@ export default function FeaturedProjects() {
           return (
             <article
               key={project.number}
-              className="glass-panel group min-w-0 overflow-hidden transition duration-300 hover:-translate-y-1 hover:border-[var(--color-neon)]/35"
+              className="glass-panel group min-w-0 overflow-hidden transition-all duration-500 ease-out hover:-translate-y-2 hover:scale-[1.01] hover:border-[var(--color-neon)]/45 hover:shadow-[0_20px_60px_rgba(0,242,254,0.12)] motion-reduce:transform-none motion-reduce:transition-none"
             >
               <ProjectVisual
                 type={project.type}
@@ -261,7 +266,7 @@ export default function FeaturedProjects() {
                     size={19}
                     strokeWidth={1.5}
                     aria-hidden="true"
-                    className="text-[var(--color-neon)]"
+                    className="text-[var(--color-neon)] transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110 motion-reduce:transition-none"
                   />
                 </div>
 
@@ -269,7 +274,7 @@ export default function FeaturedProjects() {
                   {project.category}
                 </p>
 
-                <h3 className="font-[var(--font-space-grotesk)] text-xl font-medium">
+                <h3 className="font-[var(--font-space-grotesk)] text-xl font-medium transition-colors duration-300 group-hover:text-[var(--color-neon)]">
                   {project.title}
                 </h3>
 
@@ -281,7 +286,7 @@ export default function FeaturedProjects() {
                   {project.deliverables.map((deliverable) => (
                     <span
                       key={deliverable}
-                      className="border border-white/10 px-2.5 py-1.5 text-[10px] text-white/55"
+                      className="border border-white/10 px-2.5 py-1.5 text-[10px] text-white/55 transition-colors duration-300 group-hover:border-[var(--color-neon)]/20 group-hover:text-white/75"
                     >
                       {deliverable}
                     </span>
@@ -296,10 +301,13 @@ export default function FeaturedProjects() {
                   <a
                     href="#contact"
                     aria-label={`Discuss a ${project.category.toLowerCase()} project`}
-                    className="inline-flex items-center gap-1.5 text-xs text-white/70 transition hover:text-[var(--color-neon)]"
+                    className="inline-flex items-center gap-1.5 text-xs text-white/70 transition-colors hover:text-[var(--color-neon)]"
                   >
                     Discuss project
-                    <ArrowUpRight size={14} />
+                    <ArrowUpRight
+                      size={14}
+                      className="transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 motion-reduce:transition-none"
+                    />
                   </a>
                 </div>
               </div>
