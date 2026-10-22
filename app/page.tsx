@@ -230,10 +230,10 @@ export default function Home() {
           </h2>
 
           <a
-            href="mailto:hello@example.com"
+            href="mailto:geonex@example.com"
             className="text-[var(--color-neon)] transition hover:opacity-75"
           >
-            hello@example.com{" "}
+            geonex@example.com{" "}
             <ArrowUpRight className="ml-1 inline" size={17} />
           </a>
         </div>
